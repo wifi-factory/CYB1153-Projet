@@ -11,6 +11,7 @@ Le depot a ete compare a l'infrastructure reelle du compte AWS Academy `53326724
 Les principaux points alignes avec l'etat reel sont :
 
 - ALB `ALB-annuaire`
+- listener HTTPS bonus sur `443` avec certificat auto-signe pour `/SamplePage.php`
 - target group `Group-web`
 - 2 EC2 `t2.micro` dans `us-east-1a` et `us-east-1b`
 - AMI `ami-0c3389a4fa5bddaad`
@@ -113,6 +114,17 @@ Modes utiles :
 - `.\scripts\redeploy_lab.ps1 -DestroyOnly`
 - `.\scripts\redeploy_lab.ps1 -ApplyOnly`
 
+Le bonus HTTPS est maintenant integre a l'architecture pour la partie dynamique :
+
+- `http://<alb>/SamplePage.php` redirige vers `https://<alb>/SamplePage.php`
+- `https://<alb>/SamplePage.php` passe par un listener ALB `443` avec certificat auto-signe
+- `http://<alb>/index.html` continue de rediriger vers le site web statique S3
+
+Limite importante :
+
+- le site web statique S3 via endpoint `s3-website` reste en HTTP, car ce type d'endpoint ne sert pas le contenu en HTTPS ;
+- le bonus HTTPS couvre donc l'application dynamique sur ALB, pas le site statique S3.
+
 ## Backup avant destruction
 
 Oui, il est possible de sauvegarder l'architecture avant destruction, sans ajouter de cout important.
@@ -171,7 +183,9 @@ Puis surcharge seulement ce qui change :
 - l'ALB `ALB-annuaire` ;
 - le target group `Group-web` ;
 - la regle ALB `/index.html` avec redirection HTTP 302 vers le site statique S3 ;
-- la regle ALB `/SamplePage.php` vers les serveurs web ;
+- la regle ALB HTTP `/SamplePage.php` avec redirection vers HTTPS ;
+- le listener HTTPS ALB `443` avec certificat auto-signe ;
+- la regle ALB HTTPS `/SamplePage.php` vers les serveurs web ;
 - la base RDS MySQL `tutorial-db-instance` ;
 - le bucket S3 statique ;
 - le dashboard CloudWatch avec les 4 metriques demandees.
@@ -187,6 +201,8 @@ Le compte reel n'utilise pas les mecanismes suivants, et le depot ne les ajoute 
 
 La sauvegarde automatique RDS est conservee parce qu'elle existe deja dans l'infrastructure reelle et fait partie de la configuration actuelle.
 
+Le site statique S3 reste en HTTP pour rester fidele au projet et limiter les couts. Pour obtenir du HTTPS sur la partie statique, il faudrait typiquement ajouter CloudFront, ce que le projet ne demande pas.
+
 ## Secrets
 
 Le depot ne committe aucun mot de passe ni token.
@@ -194,6 +210,7 @@ Le depot ne committe aucun mot de passe ni token.
 - si `db_password` n'est pas fourni, Terraform genere automatiquement un mot de passe aleatoire ;
 - ce mot de passe est injecte dans RDS et dans les EC2 via `user_data` ;
 - aucun secret n'est stocke en dur dans Git.
+- la cle privee du certificat auto-signe HTTPS est stockee dans l'etat Terraform local ; cet etat doit rester local et ne jamais etre committe.
 
 ## Validation par rapport au lab reel
 

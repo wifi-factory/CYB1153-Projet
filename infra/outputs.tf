@@ -4,7 +4,12 @@ output "alb_dns_name" {
 }
 
 output "sample_page_url" {
-  description = "Dynamic application URL served through the ALB."
+  description = "Dynamic application URL served through the ALB over HTTPS."
+  value       = "https://${aws_lb.main.dns_name}/SamplePage.php"
+}
+
+output "sample_page_http_redirect_url" {
+  description = "HTTP URL that redirects the dynamic application toward HTTPS."
   value       = "http://${aws_lb.main.dns_name}/SamplePage.php"
 }
 
@@ -31,6 +36,11 @@ output "web_instance_ids" {
 output "dashboard_name" {
   description = "CloudWatch dashboard name."
   value       = aws_cloudwatch_dashboard.main.dashboard_name
+}
+
+output "https_certificate_arn" {
+  description = "ARN of the self-signed ACM certificate used by the ALB HTTPS listener."
+  value       = aws_acm_certificate.alb_https.arn
 }
 
 output "security_group_ids" {

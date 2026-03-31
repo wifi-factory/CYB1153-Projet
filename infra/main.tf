@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
   }
 }
 
@@ -55,6 +59,7 @@ locals {
   web_subnet_ids     = length(var.web_subnet_ids) == 2 ? var.web_subnet_ids : [data.aws_subnets.web_a.ids[0], data.aws_subnets.web_b.ids[0]]
   db_subnet_group    = coalesce(var.db_subnet_group_name, "default-${local.vpc_id}")
   db_master_password = coalesce(var.db_password, random_password.db.result)
+  https_message_body = "Use /SamplePage.php for HTTPS. The static S3 website remains on HTTP."
 
   common_tags = {
     Project   = var.project_name
@@ -93,6 +98,14 @@ resource "aws_security_group" "lb" {
     description = "Permettre HTTP de Internet"
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Permettre HTTPS de Internet"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -267,6 +280,41 @@ resource "aws_lb" "main" {
   })
 }
 
+resource "tls_private_key" "alb_https" {
+  algorithm = "RSA"
+  rsa_bits  = 2048
+}
+
+resource "tls_self_signed_cert" "alb_https" {
+  private_key_pem       = tls_private_key.alb_https.private_key_pem
+  validity_period_hours = 8760
+
+  allowed_uses = [
+    "key_encipherment",
+    "digital_signature",
+    "server_auth",
+  ]
+
+  dns_names = [aws_lb.main.dns_name]
+
+  subject {
+    common_name  = aws_lb.main.dns_name
+    organization = "UQO CYB1153"
+    locality     = "Gatineau"
+    province     = "Quebec"
+    country      = "CA"
+  }
+}
+
+resource "aws_acm_certificate" "alb_https" {
+  private_key      = tls_private_key.alb_https.private_key_pem
+  certificate_body = tls_self_signed_cert.alb_https.cert_pem
+
+  tags = merge(local.common_tags, {
+    Name = "${var.project_name}-alb-selfsigned"
+  })
+}
+
 resource "aws_lb_target_group" "web" {
   name        = var.target_group_name
   port        = 80
@@ -337,6 +385,24 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 443
+  protocol          = "HTTPS"
+  certificate_arn   = aws_acm_certificate.alb_https.arn
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+
+  default_action {
+    type = "fixed-response"
+
+    fixed_response {
+      content_type = "text/plain"
+      message_body = local.https_message_body
+      status_code  = "404"
+    }
+  }
+}
+
 resource "aws_lb_listener_rule" "index_redirect" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 1
@@ -364,6 +430,30 @@ resource "aws_lb_listener_rule" "index_redirect" {
 resource "aws_lb_listener_rule" "sample_page" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 2
+
+  action {
+    type = "redirect"
+
+    redirect {
+      host        = "#{host}"
+      path        = "/SamplePage.php"
+      port        = "443"
+      protocol    = "HTTPS"
+      query       = "#{query}"
+      status_code = "HTTP_302"
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/SamplePage.php"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "https_sample_page" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 1
 
   action {
     type             = "forward"
