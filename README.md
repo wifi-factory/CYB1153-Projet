@@ -2,21 +2,42 @@
 
 Depot GitHub : [wifi-factory/CYB1153-Projet](https://github.com/wifi-factory/CYB1153-Projet)
 
-Ce depot fournit une base propre, reproductible et sans secret pour recreer le projet universitaire CYB1153 de deploiement d'un annuaire des employees sur AWS. Le contenu reste volontairement pedagogique : simple a lire, simple a adapter, et coherent avec l'architecture demandee dans le cours.
+Ce depot vise maintenant un objectif tres concret : permettre de redeployer, dans le meme compte AWS Academy, une infrastructure pratiquement identique a celle actuellement visible dans le lab, sans devoir remplir manuellement des `tfvars` avant execution.
 
-## Objectif du projet
+## Etat de verification
 
-Le projet cible une architecture AWS en `us-east-1` composee de :
+Le depot a ete compare a l'infrastructure reelle du compte AWS Academy `533267248726` en `us-east-1`.
 
-- un Application Load Balancer ;
-- deux instances EC2 `t2.micro` dans deux zones de disponibilite distinctes ;
-- une application PHP/Apache accessible via `/SamplePage.php` ;
-- une base de donnees RDS MySQL `tutorial-db-instance` ;
-- un site statique S3 accessible via `/index.html` ;
-- un dashboard CloudWatch avec `RequestCount`, `DatabaseConnections`, `NumberOfObjects` et `CPUUtilization` ;
-- trois Security Groups : `LB-SG`, `Web-SG`, `DB-SG`.
+Les principaux points alignes avec l'etat reel sont :
 
-Les noms fonctionnels du projet ont ete conserves, mais les valeurs reelles sensibles ou liees a un environnement particulier ne sont pas committees.
+- ALB `ALB-annuaire`
+- target group `Group-web`
+- 2 EC2 `t2.micro` dans `us-east-1a` et `us-east-1b`
+- AMI `ami-0c3389a4fa5bddaad`
+- key pair `cyb1153-key`
+- bucket `cyb1153-annuaire-2026`
+- RDS `tutorial-db-instance`
+- base `sample`
+- utilisateur `tutorial_user`
+- CloudWatch dashboard `CYB1153-Dashboard`
+- Security Groups `LB-SG`, `Web-SG`, `DB-SG`
+- backup RDS automatique a 7 jours
+
+## Important avant de lancer Terraform
+
+Le depot est prepare pour recreer l'infrastructure dans le meme lab AWS Academy avec le minimum d'ajustements manuels, mais il ne peut pas recreer des ressources portant le meme nom si elles existent deja.
+
+Concretement :
+
+- si `tutorial-db-instance` existe deja, Terraform ne pourra pas le recreer ;
+- si `cyb1153-annuaire-2026` existe deja, Terraform ne pourra pas recreer le bucket ;
+- si `ALB-annuaire` existe deja, Terraform ne pourra pas recreer ce load balancer.
+
+Donc pour une recreation propre sans ajustement manuel :
+
+1. detruire d'abord l'infrastructure existante ;
+2. ou repartir d'un lab reinitialise ;
+3. puis lancer Terraform.
 
 ## Structure du depot
 
@@ -48,163 +69,98 @@ Les noms fonctionnels du projet ont ete conserves, mais les valeurs reelles sens
 
 ## Prerequis
 
-- Un compte AWS avec les droits pour EC2, ELBv2, RDS, S3 et CloudWatch.
-- Terraform `>= 1.5`.
-- Git.
-- Une image AMI Amazon Linux 2 valide pour `us-east-1`.
-- Un key pair EC2 existant.
-- Un VPC et des subnets adaptes a votre labo.
-- Bash pour les scripts Linux.
-- PHP CLI en option pour verifier la syntaxe localement.
+- AWS CLI ou session AWS deja active sur la machine
+- Terraform `>= 1.5`
+- Git
+- acces au meme compte AWS Academy / Learner Lab
 
-## Initialiser Git
+## Utilisation recommandee
 
-Le depot a ete prepare pour GitHub avec l'identite suivante :
+Dans le lab AWS Academy actuel, aucun `terraform.tfvars` n'est requis pour redeployer la meme architecture logique. Les valeurs importantes sont deja preconfigurees dans les variables Terraform ou decouvertes automatiquement :
 
-- `user.name = Nawfal Taleb`
-- `user.email = nawfal.taleb@gmail.com`
+- VPC par defaut du compte
+- subnets par defaut pour `us-east-1a` et `us-east-1b`
+- DB subnet group par defaut du VPC
+- key pair `cyb1153-key`
+- bucket `cyb1153-annuaire-2026`
+- AMI `ami-0c3389a4fa5bddaad`
 
-Commande PowerShell reutilisable :
+Execution :
 
 ```powershell
-.\scripts\init_repo.ps1
+cd .\infra
+terraform init
+terraform plan -out=tfplan
+terraform apply tfplan
 ```
 
-Le script :
+## Overrides optionnels
 
-- initialise Git si necessaire ;
-- force la branche principale sur `main` ;
-- configure `user.name` et `user.email` ;
-- ajoute ou met a jour `origin` vers `https://github.com/wifi-factory/CYB1153-Projet.git`.
-
-## Utilisation de Terraform
-
-1. Copier le fichier d'exemple :
+Si tu veux redeployer ailleurs qu'au meme endroit, ou remplacer certaines valeurs, copie le fichier d'exemple :
 
 ```powershell
 Copy-Item .\infra\terraform.tfvars.example .\infra\terraform.tfvars
 ```
 
-2. Remplir les placeholders dans `infra/terraform.tfvars` :
+Puis surcharge seulement ce qui change :
 
 - `vpc_id`
 - `web_subnet_ids`
-- `db_subnet_ids`
+- `db_subnet_group_name`
 - `ami_id`
 - `key_pair_name`
 - `admin_cidr_ipv4`
 - `s3_bucket_name`
 - `db_password`
 
-3. Executer Terraform :
+## Ce que Terraform recree
 
-```powershell
-cd .\infra
-terraform init
-terraform fmt -recursive
-terraform validate
-terraform plan -out=tfplan
-terraform apply tfplan
-```
+- les 3 Security Groups avec des descriptions et regles proches de l'etat reel ;
+- les 2 EC2 `Web-1` et `Web-2` ;
+- l'ALB `ALB-annuaire` ;
+- le target group `Group-web` ;
+- la regle ALB `/index.html` avec redirection HTTP 302 vers le site statique S3 ;
+- la regle ALB `/SamplePage.php` vers les serveurs web ;
+- la base RDS MySQL `tutorial-db-instance` ;
+- le bucket S3 statique ;
+- le dashboard CloudWatch avec les 4 metriques demandees.
 
-## Ce que Terraform deploie
+## Limites assumees pour reduire les couts
 
-- Provider AWS dans `us-east-1`
-- Security Groups `LB-SG`, `Web-SG`, `DB-SG`
-- Deux EC2 `t2.micro` nommees `Web-1` et `Web-2`
-- Une base RDS MySQL `tutorial-db-instance`
-- Un bucket S3 de site statique
-- Un Application Load Balancer `ALB-annuaire`
-- Un target group `Groupe-web`
-- Les regles ALB :
-  - `/SamplePage.php` -> target group
-  - `/index.html` -> redirection HTTP 302 vers le site statique S3
-- Un dashboard CloudWatch `CYB1153-Dashboard`
+Le compte reel n'utilise pas les mecanismes suivants, et le depot ne les ajoute pas volontairement pour eviter du cout et rester fidele au projet :
 
-## Placeholders et configuration manuelle
+- aucun AWS Backup vault ;
+- aucun snapshot EBS manuel ;
+- aucune AMI custom ;
+- aucun versioning S3.
 
-Le depot ne contient aucun secret reel. Avant execution reelle :
+La sauvegarde automatique RDS est conservee parce qu'elle existe deja dans l'infrastructure reelle et fait partie de la configuration actuelle.
 
-- fournir un mot de passe RDS dans `terraform.tfvars` ou via `TF_VAR_db_password` ;
-- remplacer les IDs AWS placeholders par vos vraies valeurs ;
-- choisir un nom de bucket S3 globalement unique ;
-- ajuster la plage CIDR SSH d'administration ;
-- verifier que l'AMI choisie correspond bien a Amazon Linux 2.
+## Secrets
 
-## Deploiement de l'application
+Le depot ne committe aucun mot de passe ni token.
 
-Le deploiement standard passe par `user-data` Terraform :
+- si `db_password` n'est pas fourni, Terraform genere automatiquement un mot de passe aleatoire ;
+- ce mot de passe est injecte dans RDS et dans les EC2 via `user_data` ;
+- aucun secret n'est stocke en dur dans Git.
 
-- Apache et PHP sont installes automatiquement ;
-- `SamplePage.php` et `db_config.php` sont copies dans `/var/www/html` ;
-- un fichier local `db_settings.local.php` est genere sur chaque serveur web avec les valeurs RDS au moment du deploiement ;
-- le service `httpd` est active et redemarre.
+## Validation par rapport au lab reel
 
-Pour une redeploiement manuel sur une instance Linux, utiliser :
+Le depot n'est pas une copie parfaite octet pour octet de chaque valeur AWS interne, mais il est maintenant beaucoup plus proche de l'etat reel qu'avant.
 
-```bash
-sudo bash scripts/install_app.sh
-```
+Les ecarts residuels inevitables a chaque recreation sont :
 
-Ou en precisant un repertoire source personnalise :
+- nouveaux IDs AWS ;
+- nouvelles IP publiques ;
+- nouveaux ARNs ;
+- nouveau mot de passe RDS genere si non fourni ;
+- nouvelles dates de creation.
 
-```bash
-sudo bash scripts/install_app.sh /chemin/vers/app /var/www/html
-```
+## Nettoyage
 
-## Fichiers du site statique S3
-
-Le dossier `s3-site/` contient :
-
-- `index.html` : page principale de vitrine ;
-- `error.html` : page d'erreur statique ;
-- `photos.png` : image reutilisee depuis les artefacts du projet.
-
-Terraform uploade automatiquement ces fichiers dans le bucket S3.
-
-## Application PHP
-
-L'application dynamique :
-
-- lit sa configuration MySQL depuis `app/db_config.php` ;
-- accepte des overrides via un fichier local non versionne `db_settings.local.php` ;
-- cree la table `Employees` si elle n'existe pas ;
-- permet l'insertion de `Name` et `Address` ;
-- affiche les enregistrements existants ;
-- signale clairement si la configuration DB n'est pas complete.
-
-## Ressources AWS impliquees
-
-- Amazon EC2
-- Amazon RDS for MySQL
-- Application Load Balancer
-- Amazon S3 static website hosting
-- Amazon CloudWatch Dashboard
-- Security Groups
-
-## Rappel important sur les couts AWS
-
-Ce projet peut generer des couts reels, surtout avec :
-
-- RDS Multi-AZ ;
-- instances EC2 ;
-- ALB ;
-- stockage S3.
-
-Detruisez les ressources apres demonstration si vous n'en avez plus besoin :
+Pour limiter les couts :
 
 ```powershell
 cd .\infra
 terraform destroy
 ```
-
-## Notes de securite
-
-- Ne jamais committer `terraform.tfvars`.
-- Ne jamais committer `db_settings.local.php`.
-- Ne jamais committer de fichier `.pem`, mot de passe, token, endpoint sensible ou export console AWS.
-- Le repo est volontairement assaini : il n'inclut pas les valeurs reelles vues dans le rapport final.
-
-## Documentation complementaire
-
-- Vue d'ensemble technique : [docs/architecture.md](docs/architecture.md)

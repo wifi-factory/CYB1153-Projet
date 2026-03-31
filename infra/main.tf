@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 }
 
@@ -13,7 +17,45 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_vpc" "default" {
+  default = true
+}
+
+data "aws_subnets" "web_a" {
+  filter {
+    name   = "vpc-id"
+    values = [coalesce(var.vpc_id, data.aws_vpc.default.id)]
+  }
+
+  filter {
+    name   = "availability-zone"
+    values = [var.web_availability_zones[0]]
+  }
+}
+
+data "aws_subnets" "web_b" {
+  filter {
+    name   = "vpc-id"
+    values = [coalesce(var.vpc_id, data.aws_vpc.default.id)]
+  }
+
+  filter {
+    name   = "availability-zone"
+    values = [var.web_availability_zones[1]]
+  }
+}
+
+resource "random_password" "db" {
+  length  = 24
+  special = true
+}
+
 locals {
+  vpc_id             = coalesce(var.vpc_id, data.aws_vpc.default.id)
+  web_subnet_ids     = length(var.web_subnet_ids) == 2 ? var.web_subnet_ids : [data.aws_subnets.web_a.ids[0], data.aws_subnets.web_b.ids[0]]
+  db_subnet_group    = coalesce(var.db_subnet_group_name, "default-${local.vpc_id}")
+  db_master_password = coalesce(var.db_password, random_password.db.result)
+
   common_tags = {
     Project   = var.project_name
     Course    = "CYB1153"
@@ -44,11 +86,11 @@ locals {
 
 resource "aws_security_group" "lb" {
   name        = var.lb_security_group_name
-  description = "Allow HTTP traffic from the Internet to the load balancer."
-  vpc_id      = var.vpc_id
+  description = "Security group pour Load Balancer"
+  vpc_id      = local.vpc_id
 
   ingress {
-    description = "HTTP from the Internet"
+    description = "Permettre HTTP de Internet"
     from_port   = 80
     to_port     = 80
     protocol    = "tcp"
@@ -56,7 +98,6 @@ resource "aws_security_group" "lb" {
   }
 
   egress {
-    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -70,31 +111,26 @@ resource "aws_security_group" "lb" {
 
 resource "aws_security_group" "web" {
   name        = var.web_security_group_name
-  description = "Allow HTTP from the ALB and optional SSH administration."
-  vpc_id      = var.vpc_id
+  description = "Security group pour web servers"
+  vpc_id      = local.vpc_id
 
   ingress {
-    description     = "HTTP from the load balancer"
+    description     = "Permettre HTTP de Load Balancer"
     from_port       = 80
     to_port         = 80
     protocol        = "tcp"
     security_groups = [aws_security_group.lb.id]
   }
 
-  dynamic "ingress" {
-    for_each = var.admin_cidr_ipv4 == null ? [] : [var.admin_cidr_ipv4]
-
-    content {
-      description = "Optional SSH administration access"
-      from_port   = 22
-      to_port     = 22
-      protocol    = "tcp"
-      cidr_blocks = [ingress.value]
-    }
+  ingress {
+    description = "Permettre SSH de admin IP"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = [var.admin_cidr_ipv4]
   }
 
   egress {
-    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -108,11 +144,11 @@ resource "aws_security_group" "web" {
 
 resource "aws_security_group" "db" {
   name        = var.db_security_group_name
-  description = "Allow MySQL access from the web servers."
-  vpc_id      = var.vpc_id
+  description = "Security group pour Database"
+  vpc_id      = local.vpc_id
 
   ingress {
-    description     = "MySQL from web servers"
+    description     = "Permettre MySQL depuis web servers"
     from_port       = var.db_port
     to_port         = var.db_port
     protocol        = "tcp"
@@ -120,7 +156,6 @@ resource "aws_security_group" "db" {
   }
 
   egress {
-    description = "All outbound traffic"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -132,33 +167,28 @@ resource "aws_security_group" "db" {
   })
 }
 
-resource "aws_db_subnet_group" "main" {
-  name       = "${var.project_name}-db-subnet-group"
-  subnet_ids = var.db_subnet_ids
-
-  tags = merge(local.common_tags, {
-    Name = "${var.project_name}-db-subnet-group"
-  })
-}
-
 resource "aws_db_instance" "main" {
   identifier              = var.db_instance_identifier
   engine                  = "mysql"
   engine_version          = var.db_engine_version
   instance_class          = var.db_instance_class
   allocated_storage       = var.db_allocated_storage
+  max_allocated_storage   = var.db_max_allocated_storage
+  storage_type            = "gp2"
+  storage_encrypted       = var.db_storage_encrypted
   db_name                 = var.db_name
   username                = var.db_username
-  password                = var.db_password
+  password                = local.db_master_password
   port                    = var.db_port
   multi_az                = var.db_multi_az
   publicly_accessible     = false
-  db_subnet_group_name    = aws_db_subnet_group.main.name
+  db_subnet_group_name    = local.db_subnet_group
   vpc_security_group_ids  = [aws_security_group.db.id]
   skip_final_snapshot     = var.db_skip_final_snapshot
   deletion_protection     = var.db_deletion_protection
   apply_immediately       = true
-  backup_retention_period = 1
+  backup_retention_period = var.db_backup_retention_period
+  copy_tags_to_snapshot   = var.db_copy_tags_to_snapshot
 
   tags = merge(local.common_tags, {
     Name = var.db_instance_identifier
@@ -204,10 +234,10 @@ resource "aws_s3_bucket_policy" "static" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid       = "PublicReadForStaticWebsite"
+        Sid       = "PublicReadGetObject"
         Effect    = "Allow"
         Principal = "*"
-        Action    = ["s3:GetObject"]
+        Action    = "s3:GetObject"
         Resource  = "${aws_s3_bucket.static.arn}/*"
       }
     ]
@@ -229,7 +259,7 @@ resource "aws_lb" "main" {
   internal                   = false
   load_balancer_type         = "application"
   security_groups            = [aws_security_group.lb.id]
-  subnets                    = var.web_subnet_ids
+  subnets                    = local.web_subnet_ids
   enable_deletion_protection = var.alb_deletion_protection
 
   tags = merge(local.common_tags, {
@@ -242,15 +272,15 @@ resource "aws_lb_target_group" "web" {
   port        = 80
   protocol    = "HTTP"
   target_type = "instance"
-  vpc_id      = var.vpc_id
+  vpc_id      = local.vpc_id
 
   health_check {
     enabled             = true
     path                = "/SamplePage.php"
-    matcher             = "200-399"
+    matcher             = "200"
     interval            = 30
     timeout             = 5
-    healthy_threshold   = 2
+    healthy_threshold   = 5
     unhealthy_threshold = 2
   }
 
@@ -260,12 +290,12 @@ resource "aws_lb_target_group" "web" {
 }
 
 resource "aws_instance" "web" {
-  count = length(var.web_subnet_ids)
+  count = length(local.web_subnet_ids)
 
   ami                         = var.ami_id
   instance_type               = var.instance_type
   key_name                    = var.key_pair_name
-  subnet_id                   = var.web_subnet_ids[count.index]
+  subnet_id                   = local.web_subnet_ids[count.index]
   vpc_security_group_ids      = [aws_security_group.web.id]
   associate_public_ip_address = var.associate_public_ip_address
   user_data_replace_on_change = true
@@ -278,7 +308,7 @@ resource "aws_instance" "web" {
       port     = var.db_port
       name     = var.db_name
       user     = var.db_username
-      password = var.db_password
+      password = local.db_master_password
       charset  = "utf8mb4"
     })
   })
@@ -307,9 +337,33 @@ resource "aws_lb_listener" "http" {
   }
 }
 
+resource "aws_lb_listener_rule" "index_redirect" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 1
+
+  action {
+    type = "redirect"
+
+    redirect {
+      host        = local.s3_redirect_host
+      path        = "/index.html"
+      port        = "80"
+      protocol    = "HTTP"
+      query       = ""
+      status_code = "HTTP_302"
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = ["/index.html"]
+    }
+  }
+}
+
 resource "aws_lb_listener_rule" "sample_page" {
   listener_arn = aws_lb_listener.http.arn
-  priority     = 10
+  priority     = 2
 
   action {
     type             = "forward"
@@ -323,30 +377,6 @@ resource "aws_lb_listener_rule" "sample_page" {
   }
 }
 
-resource "aws_lb_listener_rule" "index_redirect" {
-  listener_arn = aws_lb_listener.http.arn
-  priority     = 20
-
-  action {
-    type = "redirect"
-
-    redirect {
-      host        = local.s3_redirect_host
-      path        = "/index.html"
-      port        = "80"
-      protocol    = "HTTP"
-      query       = "#{query}"
-      status_code = "HTTP_302"
-    }
-  }
-
-  condition {
-    path_pattern {
-      values = ["/index.html"]
-    }
-  }
-}
-
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = var.cloudwatch_dashboard_name
 
@@ -356,15 +386,32 @@ resource "aws_cloudwatch_dashboard" "main" {
         type   = "metric"
         x      = 0
         y      = 0
-        width  = 12
+        width  = 6
         height = 6
         properties = {
-          title   = "RequestCount"
-          region  = var.aws_region
-          period  = 300
-          stat    = "Sum"
+          view    = "timeSeries"
+          stacked = false
           metrics = [
-            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.main.arn_suffix, { label = var.alb_name }]
+            ["AWS/ApplicationELB", "RequestCount", "LoadBalancer", aws_lb.main.arn_suffix]
+          ]
+          region = var.aws_region
+        }
+      },
+      {
+        type   = "metric"
+        x      = 6
+        y      = 0
+        width  = 6
+        height = 6
+        properties = {
+          view    = "timeSeries"
+          stacked = false
+          region  = var.aws_region
+          period  = 86400
+          stat    = "Average"
+          title   = "S3 NumberOfObjects"
+          metrics = [
+            ["AWS/S3", "NumberOfObjects", "BucketName", aws_s3_bucket.static.bucket, "StorageType", "AllStorageTypes"]
           ]
         }
       },
@@ -372,49 +419,31 @@ resource "aws_cloudwatch_dashboard" "main" {
         type   = "metric"
         x      = 12
         y      = 0
-        width  = 12
+        width  = 6
         height = 6
         properties = {
-          title   = "DatabaseConnections"
-          region  = var.aws_region
-          period  = 300
-          stat    = "Average"
+          view    = "timeSeries"
+          stacked = false
           metrics = [
-            ["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", aws_db_instance.main.id, { label = var.db_instance_identifier }]
+            for instance in aws_instance.web :
+            ["AWS/EC2", "CPUUtilization", "InstanceId", instance.id]
           ]
+          region = var.aws_region
         }
       },
       {
         type   = "metric"
-        x      = 0
-        y      = 6
-        width  = 12
+        x      = 18
+        y      = 0
+        width  = 6
         height = 6
         properties = {
-          title   = "NumberOfObjects"
-          region  = var.aws_region
-          period  = 300
-          stat    = "Average"
+          view    = "timeSeries"
+          stacked = false
           metrics = [
-            ["AWS/S3", "NumberOfObjects", "BucketName", aws_s3_bucket.static.bucket, "StorageType", "AllStorageTypes", { label = var.s3_bucket_name }]
+            ["AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", aws_db_instance.main.id, { period = 60 }]
           ]
-        }
-      },
-      {
-        type   = "metric"
-        x      = 12
-        y      = 6
-        width  = 12
-        height = 6
-        properties = {
-          title   = "CPUUtilization"
-          region  = var.aws_region
-          period  = 300
-          stat    = "Average"
-          metrics = [
-            for index, instance in aws_instance.web :
-            ["AWS/EC2", "CPUUtilization", "InstanceId", instance.id, { label = "Web-${index + 1}" }]
-          ]
+          region = var.aws_region
         }
       }
     ]

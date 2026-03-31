@@ -1,47 +1,60 @@
 # Architecture cible
 
-Ce depot modele une architecture CYB1153 simple et credible pour un projet AWS universitaire.
+Ce depot suit maintenant de pres l'infrastructure AWS Academy observee dans le compte du lab, avec une priorite claire :
+
+- redeployer la meme architecture logique ;
+- limiter les ajustements manuels ;
+- ne pas ajouter de services supplementaires qui augmentent les couts.
 
 ## Composants principaux
 
-- Region AWS : `us-east-1`
-- Security Groups : `LB-SG`, `Web-SG`, `DB-SG`
+- Region : `us-east-1`
+- VPC : VPC par defaut du compte AWS Academy
+- Web subnets : decouverts automatiquement pour `us-east-1a` et `us-east-1b`
 - Load Balancer : `ALB-annuaire`
-- Target Group : `Groupe-web`
-- Application web : PHP + Apache
-- Route dynamique : `/SamplePage.php`
-- Route statique : `/index.html`
-- Base de donnees : RDS MySQL `tutorial-db-instance`
-- Utilisateur principal : `tutorial_user`
+- Target Group : `Group-web`
+- Security Groups : `LB-SG`, `Web-SG`, `DB-SG`
+- EC2 : `Web-1` et `Web-2`
+- Type d'instance : `t2.micro`
+- AMI : `ami-0c3389a4fa5bddaad`
+- RDS : `tutorial-db-instance`
+- Moteur : MySQL `8.4.7`
 - Base initiale : `sample`
+- Utilisateur principal : `tutorial_user`
+- S3 : `cyb1153-annuaire-2026`
 - Dashboard CloudWatch : `CYB1153-Dashboard`
 
-## Logique de flux
+## Comportement de redeploiement
 
-1. Le trafic HTTP arrive sur l'ALB.
-2. `/SamplePage.php` est transfere vers les deux EC2 `Web-1` et `Web-2`.
-3. `/index.html` est redirige vers l'endpoint website du bucket S3.
-4. Les serveurs web accedent a RDS via `DB-SG`.
-5. CloudWatch centralise les metriques de l'ALB, de RDS, de S3 et des EC2.
+Dans le meme lab AWS Academy, Terraform peut redeployer sans `terraform.tfvars` en utilisant :
 
-## Hypotheses de travail
+- le VPC par defaut ;
+- le DB subnet group par defaut ;
+- le key pair `cyb1153-key` ;
+- le bucket `cyb1153-annuaire-2026` ;
+- un mot de passe RDS genere automatiquement si aucun override n'est fourni.
 
-- Le VPC et les subnets sont fournis par le compte AWS du labo.
-- Les EC2 sont deployeees dans deux subnets web distincts.
-- La base RDS utilise un DB subnet group avec au moins deux subnets.
-- Les secrets ne sont jamais stockes dans Git.
+## Alignement avec l'etat reel
 
-## Valeurs a fournir manuellement
+Les points importants verifies contre AWS sont :
 
-- `vpc_id`
-- `web_subnet_ids`
-- `db_subnet_ids`
-- `ami_id`
-- `key_pair_name`
-- `admin_cidr_ipv4`
-- `s3_bucket_name`
-- `db_password`
+- RDS en `db.t3.micro`
+- `MultiAZ = true`
+- retention de backup RDS = `7` jours
+- redirection ALB `/index.html` vers le site S3
+- transfert ALB `/SamplePage.php` vers `Group-web`
+- health check du target group sur `/SamplePage.php` avec `matcher = 200`
+- site statique S3 avec `index.html`, `error.html`, `photos.png`
 
-## Decision de nettoyage
+## Ce que le depot n'ajoute pas volontairement
 
-Le rapport final du projet contient des details d'environnement reesels (DNS, endpoint, IDs AWS, captures). Ces valeurs n'ont pas ete reprises dans ce depot afin de garder un contenu reutilisable, propre et non sensible.
+Pour rester fidele au lab et limiter les couts, le depot ne force pas :
+
+- AWS Backup
+- snapshots EBS
+- AMI custom
+- versioning S3
+
+## Limite importante
+
+Terraform peut recreer cette infrastructure proprement apres destruction ou reinitialisation du lab. Si les ressources portant les memes noms existent deja, il faut d'abord les supprimer ou les importer dans l'etat Terraform.

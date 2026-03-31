@@ -11,33 +11,45 @@ variable "aws_region" {
 }
 
 variable "vpc_id" {
-  description = "Existing VPC ID used for the project."
+  description = "Optional VPC ID override. When omitted, the default VPC of the account is used."
   type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "web_availability_zones" {
+  description = "Availability zones used for the two web instances and the ALB."
+  type        = list(string)
+  default     = ["us-east-1a", "us-east-1b"]
+
+  validation {
+    condition     = length(var.web_availability_zones) == 2
+    error_message = "Provide exactly two availability zones for the web tier."
+  }
 }
 
 variable "web_subnet_ids" {
-  description = "Exactly two subnet IDs for the ALB and the two web servers."
+  description = "Optional explicit subnet IDs for the two web instances and the ALB. Leave empty to auto-discover the default subnets for the selected availability zones."
   type        = list(string)
+  default     = []
 
   validation {
-    condition     = length(var.web_subnet_ids) == 2
-    error_message = "Provide exactly two web subnet IDs so the EC2 instances can be split across two availability zones."
+    condition     = length(var.web_subnet_ids) == 0 || length(var.web_subnet_ids) == 2
+    error_message = "Provide either zero subnet IDs for auto-discovery or exactly two explicit subnet IDs."
   }
 }
 
-variable "db_subnet_ids" {
-  description = "At least two subnet IDs for the RDS DB subnet group."
-  type        = list(string)
-
-  validation {
-    condition     = length(var.db_subnet_ids) >= 2
-    error_message = "Provide at least two DB subnet IDs for RDS."
-  }
+variable "db_subnet_group_name" {
+  description = "Optional DB subnet group name override. When omitted, the default DB subnet group of the selected VPC is used."
+  type        = string
+  default     = null
+  nullable    = true
 }
 
 variable "ami_id" {
-  description = "AMI ID for Amazon Linux 2 in us-east-1."
+  description = "AMI ID used by the current lab deployment."
   type        = string
+  default     = "ami-0c3389a4fa5bddaad"
 }
 
 variable "instance_type" {
@@ -49,6 +61,7 @@ variable "instance_type" {
 variable "key_pair_name" {
   description = "Existing EC2 key pair name."
   type        = string
+  default     = "cyb1153-key"
 }
 
 variable "associate_public_ip_address" {
@@ -58,13 +71,13 @@ variable "associate_public_ip_address" {
 }
 
 variable "admin_cidr_ipv4" {
-  description = "Optional IPv4 CIDR allowed to SSH into the web instances. Set to null to disable SSH ingress."
+  description = "IPv4 CIDR allowed to SSH into the web instances."
   type        = string
-  default     = null
+  default     = "0.0.0.0/0"
 
   validation {
-    condition     = var.admin_cidr_ipv4 == null || can(cidrhost(var.admin_cidr_ipv4, 0))
-    error_message = "admin_cidr_ipv4 must be null or a valid IPv4 CIDR block such as 203.0.113.10/32."
+    condition     = can(cidrhost(var.admin_cidr_ipv4, 0))
+    error_message = "admin_cidr_ipv4 must be a valid IPv4 CIDR block such as 0.0.0.0/0 or 203.0.113.10/32."
   }
 }
 
@@ -101,7 +114,7 @@ variable "alb_deletion_protection" {
 variable "target_group_name" {
   description = "Name of the ALB target group."
   type        = string
-  default     = "Groupe-web"
+  default     = "Group-web"
 }
 
 variable "db_instance_identifier" {
@@ -113,7 +126,7 @@ variable "db_instance_identifier" {
 variable "db_engine_version" {
   description = "MySQL engine version for RDS."
   type        = string
-  default     = "8.0"
+  default     = "8.4.7"
 }
 
 variable "db_instance_class" {
@@ -141,8 +154,10 @@ variable "db_username" {
 }
 
 variable "db_password" {
-  description = "RDS master password. Supply this via terraform.tfvars or TF_VAR_db_password."
+  description = "Optional RDS master password override. When omitted, Terraform generates one automatically."
   type        = string
+  default     = null
+  nullable    = true
   sensitive   = true
 }
 
@@ -158,6 +173,12 @@ variable "db_multi_az" {
   default     = true
 }
 
+variable "db_backup_retention_period" {
+  description = "Automated backup retention period in days."
+  type        = number
+  default     = 7
+}
+
 variable "db_skip_final_snapshot" {
   description = "Skip final snapshot when destroying the RDS instance."
   type        = bool
@@ -170,9 +191,28 @@ variable "db_deletion_protection" {
   default     = false
 }
 
+variable "db_storage_encrypted" {
+  description = "Encrypt the RDS storage."
+  type        = bool
+  default     = true
+}
+
+variable "db_copy_tags_to_snapshot" {
+  description = "Copy tags from the DB instance to automated snapshots."
+  type        = bool
+  default     = true
+}
+
+variable "db_max_allocated_storage" {
+  description = "Maximum autoscaled storage for the RDS instance."
+  type        = number
+  default     = 1000
+}
+
 variable "s3_bucket_name" {
-  description = "Globally unique bucket name used for the static website."
+  description = "Bucket name used for the static website."
   type        = string
+  default     = "cyb1153-annuaire-2026"
 }
 
 variable "s3_force_destroy" {

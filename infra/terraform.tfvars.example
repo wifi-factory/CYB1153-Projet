@@ -1,23 +1,12 @@
-# Copy this file to terraform.tfvars and replace every placeholder before running terraform apply.
+# This file is now optional.
+# In the current AWS Academy lab account, Terraform can recreate the project without any tfvars.
+# Use this file only if you want to override the lab defaults.
 
-vpc_id = "vpc-xxxxxxxxxxxxxxxxx"
-
-web_subnet_ids = [
-  "subnet-web-az-a",
-  "subnet-web-az-b",
-]
-
-db_subnet_ids = [
-  "subnet-db-az-a",
-  "subnet-db-az-b",
-]
-
-ami_id            = "ami-xxxxxxxxxxxxxxxxx"
-key_pair_name     = "CHANGE_ME_KEYPAIR_NAME"
-admin_cidr_ipv4   = "203.0.113.10/32"
-s3_bucket_name    = "change-me-cyb1153-static-site"
-db_password       = "CHANGE_ME_STRONG_PASSWORD"
-project_name      = "cyb1153-annuaire"
-instance_type     = "t2.micro"
-db_instance_class = "db.t3.micro"
-db_multi_az       = true
+# vpc_id              = "vpc-xxxxxxxxxxxxxxxxx"
+# web_subnet_ids      = ["subnet-aaaaaaaaaaaaaaaaa", "subnet-bbbbbbbbbbbbbbbbb"]
+# db_subnet_group_name = "default-vpc-xxxxxxxxxxxxxxxxx"
+# ami_id              = "ami-xxxxxxxxxxxxxxxxx"
+# key_pair_name       = "cyb1153-key"
+# admin_cidr_ipv4     = "0.0.0.0/0"
+# s3_bucket_name      = "cyb1153-annuaire-2026"
+# db_password         = "OPTIONAL_OVERRIDE_ONLY"
