@@ -94,6 +94,23 @@ terraform plan -out=tfplan
 terraform apply tfplan
 ```
 
+Pour automatiser un test complet de recreation du lab a partir des noms exacts utilises dans le projet, un script PowerShell est fourni :
+
+```powershell
+.\scripts\redeploy_lab.ps1
+```
+
+Avec suppression puis recreation sans confirmation interactive Terraform :
+
+```powershell
+.\scripts\redeploy_lab.ps1 -AutoApprove
+```
+
+Modes utiles :
+
+- `.\scripts\redeploy_lab.ps1 -DestroyOnly`
+- `.\scripts\redeploy_lab.ps1 -ApplyOnly`
+
 ## Overrides optionnels
 
 Si tu veux redeployer ailleurs qu'au meme endroit, ou remplacer certaines valeurs, copie le fichier d'exemple :
