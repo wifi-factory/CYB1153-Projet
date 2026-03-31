@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYB1153 Annuaire AWS</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      background: linear-gradient(135deg, #0d3b66 0%, #145da0 45%, #f5f8fc 45%, #f5f8fc 100%);
+      color: #16324f;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      box-sizing: border-box;
+    }
+
+    .card {
+      width: min(980px, 100%);
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 24px;
+      background: rgba(255, 255, 255, 0.96);
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 18px 45px rgba(8, 28, 52, 0.18);
+    }
+
+    .content {
+      padding: 40px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: #d7ecff;
+      color: #0b5cab;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    h1 {
+      margin: 18px 0 12px;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.1;
+    }
+
+    p {
+      margin: 0 0 16px;
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .note {
+      padding: 14px 16px;
+      border-left: 4px solid #0b5cab;
+      background: #eef6ff;
+      border-radius: 12px;
+    }
+
+    .art {
+      background: radial-gradient(circle at top, #1a6dc2, #0d3b66 70%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .art img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 18px;
+      box-shadow: 0 16px 30px rgba(0, 0, 0, 0.25);
+      background: #ffffff;
+    }
+
+    @media (max-width: 860px) {
+      .card {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <section class="content">
+      <span class="tag">CYB1153 | AWS | S3 Static Website</span>
+      <h1>Annuaire des employees</h1>
+      <p>Cette page statique represente la vitrine publique du projet universitaire CYB1153. Elle est hebergee dans un bucket S3 configure en mode static website hosting.</p>
+      <p>Dans l'architecture cible, l'Application Load Balancer redirige la route <code>/index.html</code> vers ce site statique, tandis que la route <code>/SamplePage.php</code> reste servie par les instances EC2 Apache/PHP.</p>
+      <div class="note">
+        Verifiez que <code>index.html</code>, <code>error.html</code> et <code>photos.png</code> sont bien presents dans le bucket apres le deploiement Terraform.
+      </div>
+    </section>
+    <aside class="art">
+      <img src="photos.png" alt="Illustration employee directory">
+    </aside>
+  </main>
+</body>
+</html>

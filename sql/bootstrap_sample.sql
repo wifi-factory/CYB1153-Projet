@@ -1,0 +1,13 @@
+CREATE DATABASE IF NOT EXISTS sample;
+USE sample;
+
+CREATE TABLE IF NOT EXISTS Employees (
+    EmployeeID INT AUTO_INCREMENT PRIMARY KEY,
+    Name VARCHAR(150) NOT NULL,
+    Address VARCHAR(255) NOT NULL,
+    CreatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Optional manual test data:
+-- INSERT INTO Employees (Name, Address)
+-- VALUES ('CHANGE_ME_NAME', 'CHANGE_ME_ADDRESS');

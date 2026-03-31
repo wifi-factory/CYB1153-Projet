@@ -1,0 +1,23 @@
+# Copy this file to terraform.tfvars and replace every placeholder before running terraform apply.
+
+vpc_id = "vpc-xxxxxxxxxxxxxxxxx"
+
+web_subnet_ids = [
+  "subnet-web-az-a",
+  "subnet-web-az-b",
+]
+
+db_subnet_ids = [
+  "subnet-db-az-a",
+  "subnet-db-az-b",
+]
+
+ami_id            = "ami-xxxxxxxxxxxxxxxxx"
+key_pair_name     = "CHANGE_ME_KEYPAIR_NAME"
+admin_cidr_ipv4   = "203.0.113.10/32"
+s3_bucket_name    = "change-me-cyb1153-static-site"
+db_password       = "CHANGE_ME_STRONG_PASSWORD"
+project_name      = "cyb1153-annuaire"
+instance_type     = "t2.micro"
+db_instance_class = "db.t3.micro"
+db_multi_az       = true
