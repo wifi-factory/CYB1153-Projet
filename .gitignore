@@ -38,3 +38,5 @@ desktop.ini
 __pycache__/
 coverage/
 vendor/
+
+backups/

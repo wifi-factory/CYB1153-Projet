@@ -58,8 +58,10 @@ Donc pour une recreation propre sans ajustement manuel :
 |   |-- index.html
 |   `-- photos.png
 |-- scripts/
+|   |-- backup_lab.ps1
 |   |-- init_repo.ps1
 |   |-- install_app.sh
+|   |-- redeploy_lab.ps1
 |   `-- user-data-web.sh
 |-- sql/
 |   `-- bootstrap_sample.sql
@@ -110,6 +112,38 @@ Modes utiles :
 
 - `.\scripts\redeploy_lab.ps1 -DestroyOnly`
 - `.\scripts\redeploy_lab.ps1 -ApplyOnly`
+
+## Backup avant destruction
+
+Oui, il est possible de sauvegarder l'architecture avant destruction, sans ajouter de cout important.
+
+Le script suivant exporte localement un inventaire JSON complet des ressources AWS du projet :
+
+```powershell
+.\scripts\backup_lab.ps1
+```
+
+Le backup est ecrit dans un dossier local `backups\<timestamp>\` ignore par Git, avec notamment :
+
+- EC2
+- Security Groups
+- VPC et subnets
+- ALB, listeners, rules, target health
+- RDS et snapshots existants
+- bucket S3, policy, website config, objets
+- dashboard CloudWatch
+- etat AWS Backup, snapshots EBS, AMI custom
+
+Options utiles :
+
+- `.\scripts\backup_lab.ps1 -DownloadS3`
+- `.\scripts\backup_lab.ps1 -CreateRdsSnapshot`
+
+Recommandation cout minimal :
+
+- faire `.\scripts\backup_lab.ps1` pour sauvegarder la configuration ;
+- ajouter `-DownloadS3` si tu veux aussi une copie locale du contenu du bucket ;
+- n'utiliser `-CreateRdsSnapshot` que si tu veux figer les donnees MySQL avant destruction, car cela ajoute un cout de stockage snapshot.
 
 ## Overrides optionnels
 
